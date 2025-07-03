@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanogpt"
+version = "0.1.0"
+description = "A PyTorch-based implementation of NanoGPT for training and inference."
+authors = [
+    { name = "Divyanshu Goyal", email = "divyanshu.g25@gmail.com" }
+]
+requires-python = ">=3.10"
+
+dependencies = [
+   "torch"
+]
+
+[dependency-group]
+dev = [
+    "ruff",   # For linting and formatting
+    "pytest", # For running tests
+    "wandb",  # For experiment tracking
+]
