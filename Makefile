@@ -62,13 +62,18 @@ venv: dotenv ## Create virtual environment
 	@$(uv) tool run --from 'python-dotenv[cli]' dotenv run $(uv) sync --frozen
 	@echo "🎉 Virtual environment setup complete!"
 
-
 environment: uv uvlock venv ## Create environment
 	@echo "🚀 All set! Your environment is ready."
 	@echo
 	@echo "💡 Quick start commands:"
 	@echo "   👉  To activate: source .venv/bin/activate"
 	@echo "✨ Happy coding with NanoGPT!"
+
+
+black-formatting:
+	@echo "🔄 Formatting code with Black..."
+	@$(uv) tool run black .
+	@echo "✅ Code formatted with Black!"
 
 
 
