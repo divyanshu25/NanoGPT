@@ -11,10 +11,11 @@ import inspect
 class GPTConfig:
     """
     Configuration class for GPT model hyperparameters.
-    
+
     This dataclass holds all the configuration parameters needed to define
     the architecture and training setup of the GPT model.
     """
+
     block_size: int = 512  # Maximum sequence length (context window)
     vocab_size: int = 50257  # Size of the vocabulary (number of unique tokens)
     n_layer: int = 2  # Number of transformer blocks in the model
@@ -26,7 +27,7 @@ class GPTConfig:
 class GPT(nn.Module):
     """
     The GPT (Generative Pre-trained Transformer) language model.
-    
+
     This class implements the core GPT architecture with:
     - Token and position embeddings
     - Stack of transformer blocks
@@ -37,13 +38,13 @@ class GPT(nn.Module):
     def __init__(self, config):
         """
         Initialize the GPT model with the given configuration.
-        
+
         Args:
             config (GPTConfig): Configuration object containing model hyperparameters
         """
         super().__init__()
         self.config = config
-        
+
         # Define the main transformer components
         self.transformer = nn.ModuleDict(
             dict(
@@ -57,7 +58,7 @@ class GPT(nn.Module):
                 ln_f=nn.LayerNorm(config.n_embed),
             )
         )
-        
+
         # Language modeling head: projects hidden states to vocabulary logits
         self.lm_head = nn.Linear(config.n_embed, config.vocab_size, bias=False)
 
@@ -72,17 +73,17 @@ class GPT(nn.Module):
     def _init_weights(self, module):
         """
         Initialize model weights using appropriate strategies for different layer types.
-        
+
         Args:
             module: The PyTorch module to initialize
         """
         # Base standard deviation for weight initialization
         std = 0.02
-        
+
         # Scale down initialization for residual layers (helps with training stability)
         if hasattr(module, "NANOGPT_SCALE_INIT"):
             std *= (2 * self.config.n_layer) ** -0.5
-            
+
         # Initialize linear layers with normal distribution
         if isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
@@ -95,16 +96,16 @@ class GPT(nn.Module):
     def configure_optimizers(self, learning_rate, weight_decay, device):
         """
         Configure the optimizer for training with weight decay regularization.
-        
+
         This method separates parameters into two groups:
         - Parameters with weight decay (typically weights of linear layers)
         - Parameters without weight decay (typically biases and embeddings)
-        
+
         Args:
             learning_rate (float): Learning rate for the optimizer
             weight_decay (float): Weight decay coefficient for regularization
             device (str): Device type ('cuda', 'mps', or 'cpu')
-            
+
         Returns:
             torch.optim.AdamW: Configured optimizer
         """
@@ -137,7 +138,7 @@ class GPT(nn.Module):
         fused_available = "fused" in inspect.signature(torch.optim.AdamW).parameters
         use_fused = fused_available and device == "cuda"
         print(f"Using fused: {use_fused}")
-        
+
         # Create and return the optimizer
         optimizer = torch.optim.AdamW(
             optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8
@@ -147,11 +148,11 @@ class GPT(nn.Module):
     def forward(self, idx, targets=None):
         """
         Forward pass through the GPT model.
-        
+
         Args:
             idx (torch.Tensor): Input token indices of shape (batch_size, sequence_length)
             targets (torch.Tensor, optional): Target tokens for loss computation
-            
+
         Returns:
             tuple: (logits, loss) where:
                 - logits: Output logits of shape (batch_size, sequence_length, vocab_size)
@@ -159,21 +160,21 @@ class GPT(nn.Module):
         """
         # Get batch size and sequence length
         B, T = idx.size()
-        
+
         # Ensure sequence length doesn't exceed model's maximum context length
         assert (
             T <= self.config.block_size
         ), f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}"
-        
+
         # Create position indices for the sequence
         pos = torch.arange(0, T, dtype=torch.long, device=idx.device)  # Shape (T,)
-        
+
         # Get token embeddings: convert token indices to dense vectors
         tok_emb = self.transformer.wte(idx)  # Shape: (B, T, n_embed)
-        
+
         # Get position embeddings: add positional information
         pos_emb = self.transformer.wpe(pos)  # Shape: (T, n_embed)
-        
+
         # Combine token and position embeddings
         x = tok_emb + pos_emb  # Shape: (B, T, n_embed)
 
@@ -183,29 +184,29 @@ class GPT(nn.Module):
 
         # Apply final layer normalization
         x = self.transformer.ln_f(x)
-        
+
         # Project to vocabulary size to get logits for next token prediction
         logits = self.lm_head(x)  # Shape: (B, T, vocab_size)
-        
+
         # Compute loss if targets are provided
         loss = None
         if targets is not None:
             # Reshape for cross-entropy loss computation
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
-            
+
         return logits, loss
 
     @classmethod
     def from_pretrained(cls, model_type):
         """
         Load a pretrained GPT-2 model from Hugging Face transformers.
-        
+
         This method creates a GPT model with the architecture matching the
         specified pretrained model and loads the pretrained weights.
-        
+
         Args:
             model_type (str): Type of GPT-2 model ('gpt2', 'gpt2-medium', 'gpt2-large', 'gpt2-xl')
-            
+
         Returns:
             GPT: Model instance with pretrained weights loaded
         """
@@ -222,7 +223,7 @@ class GPT(nn.Module):
             "gpt2-large": dict(n_layer=36, n_head=24, n_embed=1280),  # 774M params
             "gpt2-xl": dict(n_layer=48, n_head=32, n_embed=1600),  # 1558M params
         }[model_type]
-        
+
         # Set vocabulary size and context length (same for all GPT-2 models)
         config_args["vocab_size"] = 50257  # Standard GPT-2 vocabulary size
         config_args["block_size"] = 1024  # Standard GPT-2 context length
@@ -246,7 +247,7 @@ class GPT(nn.Module):
         # Remove keys that don't exist in our model
         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith(".attn.masked_bias")]
         sd_keys_hf = [k for k in sd_keys_hf if not k.endswith(".attn.bias")]
-        
+
         # These weights need to be transposed because HuggingFace uses Conv1D instead of Linear
         transposed = [
             "attn.c_attn.weight",
@@ -259,7 +260,7 @@ class GPT(nn.Module):
         assert len(sd_keys_hf) == len(
             sd_keys
         ), f"mismatched keys: {len(sd_keys_hf)} != {len(sd_keys)}"
-        
+
         # Copy weights from HuggingFace model to our model
         for k in sd_keys_hf:
             if any(k.endswith(w) for w in transposed):
@@ -280,10 +281,10 @@ class GPT(nn.Module):
 def generate(num_sequences, max_length, model, context, device):
     """
     Generate text sequences using the trained GPT model.
-    
+
     This function performs autoregressive text generation using top-k sampling
     to produce diverse and coherent text continuations.
-    
+
     Args:
         num_sequences (int): Number of sequences to generate
         max_length (int): Maximum length of each generated sequence
@@ -293,11 +294,11 @@ def generate(num_sequences, max_length, model, context, device):
     """
     # Initialize the tokenizer (GPT-2 uses byte-pair encoding)
     enc = tiktoken.get_encoding("gpt2")
-    
+
     # Encode the context string to token indices
     tokens = enc.encode(context)
     tokens = torch.tensor(tokens, dtype=torch.long)
-    
+
     # Create multiple copies for batch generation
     tokens = tokens.unsqueeze(0).repeat(num_sequences, 1)
     x = tokens.to(device)
@@ -312,23 +313,23 @@ def generate(num_sequences, max_length, model, context, device):
         with torch.no_grad():
             # Get model predictions for next token
             logits, _ = model(x)  # Shape: (B, T, vocab_size)
-            
+
             # Only use the last token's predictions for next token
             logits = logits[:, -1, :]  # Shape: (B, vocab_size)
-            
+
             # Convert logits to probabilities
             probs = F.softmax(logits, dim=-1)  # Shape: (B, vocab_size)
 
             # Apply top-k sampling (k=50) for diverse generation
             # This helps avoid repetitive text by sampling from top-k most likely tokens
             topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
-            
+
             # Sample from the top-k distribution
             ix = torch.multinomial(topk_probs, num_samples=1)  # Shape: (B, 1)
-            
+
             # Get the actual token indices from the top-k indices
             xcol = torch.gather(topk_indices, -1, ix)  # Shape: (B, 1)
-            
+
             # Append the new token to the sequence
             x = torch.cat((x, xcol), dim=1)
 
@@ -361,8 +362,8 @@ if __name__ == "__main__":
     context = "Hello, I'm a language model,"
     generate(
         num_sequences=3,  # Generate 3 different sequences
-        max_length=30,    # Each sequence up to 30 tokens
+        max_length=30,  # Each sequence up to 30 tokens
         model=model,
         context=context,
-        device=device
+        device=device,
     )

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from .mlp import MLP
-from .attention import CausalSelfAttention
+from gpt2.mlp import MLP
+from gpt2.attention import CausalSelfAttention
 
 
 class Block(nn.Module):
@@ -14,12 +14,32 @@ class Block(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        # Layer normalization before self-attention (pre-norm architecture)
+        # This normalizes the input to have zero mean and unit variance
         self.ln_1 = nn.LayerNorm(config.n_embed)
+
+        # Multi-head causal self-attention mechanism
+        # This allows the model to attend to different positions in the sequence
         self.attn = CausalSelfAttention(config)
+
+        # Layer normalization before MLP (pre-norm architecture)
+        # Second normalization layer for the feed-forward network
         self.ln_2 = nn.LayerNorm(config.n_embed)
+
+        # Multi-layer perceptron (feed-forward network)
+        # This processes the attended representations
         self.mlp = MLP(config)
 
     def forward(self, x):
+        # First residual connection: x + attention(norm(x))
+        # Apply layer norm, then self-attention, then add residual connection
+        # The residual connection helps with gradient flow and training stability
         x = x + self.attn(self.ln_1(x))
+
+        # Second residual connection: x + mlp(norm(x))
+        # Apply layer norm, then MLP, then add residual connection
+        # This creates a two-stage processing: attention -> feed-forward
         x = x + self.mlp(self.ln_2(x))
+
+        # Return the processed representation
         return x

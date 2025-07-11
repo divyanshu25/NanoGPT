@@ -22,36 +22,38 @@ class Trainer:
     GPT-2 Trainer class that handles model training, evaluation, and optimization.
     Implements modern training techniques like learning rate scheduling and gradient clipping.
     """
-    
+
     def __init__(self):
         """Initialize trainer with model configuration, data loading, and training parameters."""
         # Initialize GPT model with default configuration
         self.config = GPTConfig()
         self.model = GPT(self.config)
         self.model.to(device)
-        
+
         # Optional: Compile model for faster training (commented out to avoid warnings)
         # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
         # self.model = torch.compile(self.model, mode="reduce-overhead")
-        
+
         # Initialize data loader with training data
         self.dataloader = DataLoader(
             data_file="/Users/divyanshugoyal/workspace/nanogpt/src/data/input.txt",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
         )
-        
+
         # Training hyperparameters
         self.num_epochs = 1  # Number of complete passes through the dataset
         self.num_eval_samples = 100  # Number of samples to use for loss estimation
         self.estimate_loss_after = 1  # Estimate loss every N steps
-        
+
         # Learning rate scheduling parameters
         self.max_learning_rate = 6e-4  # Peak learning rate
-        self.min_learning_rate = self.max_learning_rate * 0.1  # Minimum learning rate (10% of max)
+        self.min_learning_rate = (
+            self.max_learning_rate * 0.1
+        )  # Minimum learning rate (10% of max)
         self.warmup_steps = 10  # Steps to warm up from 0 to max learning rate
         self.max_steps = 100  # Total training steps
-        
+
         # Initialize optimizer with AdamW and weight decay for regularization
         self.optimzer = self.model.configure_optimizers(
             learning_rate=self.max_learning_rate, weight_decay=0.10, device=device
@@ -62,27 +64,27 @@ class Trainer:
         """
         Estimate average loss on both training and validation sets.
         This provides a more stable estimate than single-batch loss.
-        
+
         Returns:
             dict: Contains 'train' and 'val' average losses
         """
         out = {}
         self.model.eval()  # Set model to evaluation mode (disables dropout, etc.)
-        
+
         # Evaluate on both train and validation splits
         for split in ["train", "val"]:
             losses = torch.zeros(self.num_eval_samples)
-            
+
             # Calculate loss over multiple samples for stable estimate
             for k in range(self.num_eval_samples):
                 X, Y = self.dataloader.get_batch(split)
                 X = X.to(device)
                 Y = Y.to(device)
-                
+
                 # Forward pass without gradient computation (eval mode)
                 _, loss = self.model(X, Y)
                 losses[k] = loss.item()
-            
+
             # Store average loss for this split
             out[split] = losses.mean()
         return out
@@ -90,14 +92,14 @@ class Trainer:
     def get_lr(self, step):
         """
         Implement learning rate scheduling with warmup and cosine annealing.
-        
+
         - Warmup: Linear increase from 0 to max_lr over warmup_steps
         - Cosine annealing: Smooth decay from max_lr to min_lr using cosine function
         - Constant: min_lr after max_steps
-        
+
         Args:
             step (int): Current training step
-            
+
         Returns:
             float: Learning rate for current step
         """
@@ -127,23 +129,23 @@ class Trainer:
         ## Start training ##
         # Set precision for matrix multiplications (improves performance on modern GPUs)
         torch.set_float32_matmul_precision("high")
-        
+
         # Main training loop over epochs
         for epoch in range(self.num_epochs):
             # Process all batches in the current epoch
             for step in range(self.dataloader.total_batches):
                 start_time = time.time()  # Track step timing
-                
+
                 # Get training batch and move to device
                 x, y = self.dataloader.get_batch()
                 x, y = x.to(device), y.to(device)
-                
+
                 # Reset gradients from previous step
                 self.optimzer.zero_grad()
-                
+
                 # Forward pass: compute predictions and loss
                 logits, loss = self.model(x, y)
-                
+
                 # Backward pass: compute gradients
                 loss.backward()
 
@@ -152,7 +154,7 @@ class Trainer:
                 norm = torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(), 1.0
                 )  # Clip gradients to max norm of 1.0
-                
+
                 # Update learning rate based on current step
                 lr = self.get_lr(step)
                 for param_group in self.optimzer.param_groups:
@@ -160,7 +162,7 @@ class Trainer:
 
                 # Optional: Print gradient norm and learning rate for debugging
                 # print(f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}")
-                
+
                 # Apply gradients to update model parameters
                 self.optimzer.step()
 
@@ -171,13 +173,15 @@ class Trainer:
 
                 # Calculate training throughput (tokens processed per second)
                 tokens_per_second = (
-                    self.dataloader.batch_size* self.dataloader.block_size / (end_time - start_time)
+                    self.dataloader.batch_size
+                    * self.dataloader.block_size
+                    / (end_time - start_time)
                 )
-                
+
                 # Periodically estimate loss on train/val sets for monitoring
                 if step % self.estimate_loss_after == 0:
                     losses = self.estimate_loss()
-                
+
                 # Print comprehensive training statistics
                 print(
                     f"Epoch {epoch} | Loss: {losses['train']} | Val Loss: {losses['val']} | "
@@ -201,7 +205,7 @@ if __name__ == "__main__":
     # Generate sample text using the trained model
     generate(
         num_sequences=3,  # Generate 3 different sequences
-        max_length=30,    # Maximum length of each sequence
+        max_length=30,  # Maximum length of each sequence
         model=trainer.model,
         context="Hello, I'm a language model,",  # Starting prompt
         device=device,
