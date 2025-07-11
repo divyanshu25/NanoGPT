@@ -4,15 +4,17 @@ import torch.nn as nn
 from torch.nn import functional as F
 from gpt2.block import Block
 import tiktoken
+import inspect
 
 
 @dataclass
 class GPTConfig:
-    block_size: int = 1024  # context length
+    block_size: int = 512  # context length
     vocab_size: int = 50257  # number of tokens in the vocabulary
-    n_layer: int = 12  # number of layers
-    n_head: int = 12  # number of attention heads
-    n_embed: int = 768  # embedding dimension
+    n_layer: int = 2  # number of layers
+    n_head: int = 2  # number of attention heads
+    n_embed: int = 128  # embedding dimension
+    batch_size: int = 4  # batch size
 
 
 class GPT(nn.Module):
@@ -33,7 +35,53 @@ class GPT(nn.Module):
         )
         self.lm_head = nn.Linear(config.n_embed, config.vocab_size, bias=False)
 
-    def forward(self, idx):
+        # weight sharing scheme
+        self.transformer.wte.weight = self.lm_head.weight
+
+        # initialize all weights
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        std = 0.02
+        if hasattr(module, "NANOGPT_SCALE_INIT"):
+            std *= (2 * self.config.n_layer) ** -0.5
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def configure_optimizers(self, learning_rate, weight_decay, device):
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+
+        decay_params = [p for p in param_dict.values() if p.dim() >= 2]
+        nodecay_params = [p for p in param_dict.values() if p.dim() < 2]
+
+        optim_groups = [
+            {"params": [p for p in decay_params], "weight_decay": weight_decay},
+            {"params": [p for p in nodecay_params], "weight_decay": 0.0},
+        ]
+
+        num_decay_params = sum(p.numel() for p in decay_params)
+        num_nodecay_params = sum(p.numel() for p in nodecay_params)
+        print(
+            f"Num decay parameter tensors: {len(decay_params)}, with {num_decay_params} parameters"
+        )
+        print(
+            f"Num nodecay parameter tensors: {len(nodecay_params)}, with {num_nodecay_params} parameters"
+        )
+
+        fused_available = "fused" in inspect.signature(torch.optim.AdamW).parameters
+        use_fused = fused_available and device == "cuda"
+        print(f"Using fused: {use_fused}")
+        optimizer = torch.optim.AdamW(
+            optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8
+        )
+        return optimizer
+
+    def forward(self, idx, targets=None):
         B, T = idx.size()
         assert (
             T <= self.config.block_size
@@ -48,7 +96,10 @@ class GPT(nn.Module):
 
         x = self.transformer.ln_f(x)
         logits = self.lm_head(x)
-        return logits
+        loss = None
+        if targets is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
+        return logits, loss
 
     @classmethod
     def from_pretrained(cls, model_type):
@@ -127,7 +178,7 @@ def generate(num_sequences, max_length, model, context, device):
 
     while x.size(1) < max_length:
         with torch.no_grad():
-            logits = model(x)  # (B, T, vocab_size)
+            logits, _ = model(x)  # (B, T, vocab_size)
             logits = logits[:, -1, :]  # (B, vocab_size)
             # get Probabilities
             probs = F.softmax(logits, dim=-1)  # (B, vocab_size)
@@ -149,13 +200,23 @@ def generate(num_sequences, max_length, model, context, device):
 
 # test the model
 if __name__ == "__main__":
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = GPT.from_pretrained("gpt2")
-    print(model)
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+
+    print(f"Using device: {device}")
+
+    # load the model
+    model = GPT(GPTConfig())
+    # print(model)
     model.eval()
     model.to(device)
 
     context = "Hello, I'm a language model,"
     generate(
-        num_sequences=3, max_length=60, model=model, context=context, device=device
+        num_sequences=3, max_length=30, model=model, context=context, device=device
     )

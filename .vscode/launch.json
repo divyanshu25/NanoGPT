@@ -29,7 +29,23 @@
             "name": "Python: GPT2",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/gpt2/train_gpt2.py",
+            "program": "${workspaceFolder}/src/gpt2/gpt2_model.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Python: GPT2Dataloader",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gpt2/dataloader.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Python: GPT2Trainer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gpt2/trainer.py",
             "python": "${workspaceFolder}/.venv/bin/python",
             "cwd": "${workspaceFolder}"
         }

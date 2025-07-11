@@ -10,6 +10,7 @@ class MLP(nn.Module):
             approximate="tanh"
         )  # GELU is a non-linear activation function that is used in the feed-forward network.
         self.c_proj = nn.Linear(4 * config.n_embed, config.n_embed)
+        self.c_proj.NANOGPT_SCALE_INIT = 1
 
     def forward(self, x):
         x = self.c_fc(x)
