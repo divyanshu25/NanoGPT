@@ -2,30 +2,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Dataset Loader",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/dataset.py",
-            "python": "${workspaceFolder}/.venv/bin/python",
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Python: NanoGPT",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/nanogpt.py",
-            "python": "${workspaceFolder}/.venv/bin/python",
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Python: Train",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/train.py",
-            "python": "${workspaceFolder}/.venv/bin/python",
-            "cwd": "${workspaceFolder}"
-        },
-        {
             "name": "Python: GPT2",
             "type": "debugpy",
             "request": "launch",

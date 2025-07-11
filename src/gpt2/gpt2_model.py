@@ -60,6 +60,7 @@ class GPT(nn.Module):
         )
 
         # Language modeling head: projects hidden states to vocabulary logits
+        # Note: We'll tie the weights with the embedding layer
         self.lm_head = nn.Linear(config.n_embed, config.vocab_size, bias=False)
 
         # Weight sharing scheme: tie input and output embeddings
@@ -170,10 +171,10 @@ class GPT(nn.Module):
         pos = torch.arange(0, T, dtype=torch.long, device=idx.device)  # Shape (T,)
 
         # Get token embeddings: convert token indices to dense vectors
-        tok_emb = self.transformer.wte(idx)  # Shape: (B, T, n_embed)
+        tok_emb = self.transformer.wte(idx)  # Shape: (B, T, n_embed) # type: ignore
 
         # Get position embeddings: add positional information
-        pos_emb = self.transformer.wpe(pos)  # Shape: (T, n_embed)
+        pos_emb = self.transformer.wpe(pos)  # Shape: (T, n_embed) # type: ignore
 
         # Combine token and position embeddings
         x = tok_emb + pos_emb  # Shape: (B, T, n_embed)

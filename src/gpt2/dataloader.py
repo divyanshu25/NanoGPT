@@ -27,10 +27,10 @@ class DataLoader:
         if self.current_index + (self.batch_size * self.block_size + 1) > len(data):
             self.current_index = 0
         data_size = self.batch_size * self.block_size
-        current_batch = self.tokens[
+        current_batch = data[
             self.current_index : self.current_index + data_size
         ].view(self.batch_size, self.block_size)
-        target_batch = self.tokens[
+        target_batch = data[
             self.current_index + 1 : self.current_index + data_size + 1
         ].view(self.batch_size, self.block_size)
         self.current_index += self.batch_size * self.block_size
