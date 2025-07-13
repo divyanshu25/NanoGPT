@@ -4,6 +4,7 @@ from gpt2.dataloader import DataLoader
 import time
 from gpt2.gpt2_model import generate
 import math
+import wandb
 
 ## Initialize variables ##
 
@@ -16,6 +17,8 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
+print(f"Using device: {device}")
+
 
 class Trainer:
     """
@@ -25,6 +28,23 @@ class Trainer:
 
     def __init__(self):
         """Initialize trainer with model configuration, data loading, and training parameters."""
+        # Initialize wandb for experiment tracking
+        wandb.init(
+            project="nano-gpt2",
+            config={
+                "model_type": "GPT-2",
+                "batch_size": 32,
+                "block_size": 256,
+                "max_learning_rate": 6e-4,
+                "min_learning_rate": 6e-5,
+                "warmup_steps": 10,
+                "max_steps": 100,
+                "num_epochs": 1,
+                "weight_decay": 0.10,
+                "gradient_clip_norm": 1.0,
+            },
+        )
+
         # Initialize GPT model with default configuration
         self.config = GPTConfig()
         self.model = GPT(self.config)
@@ -36,7 +56,7 @@ class Trainer:
 
         # Initialize data loader with training data
         self.dataloader = DataLoader(
-            data_file="/Users/divyanshugoyal/workspace/nanogpt/src/data/input.txt",
+            data_file="/home/azureuser/cloudfiles/code/Users/divgoyal/NanoGPT/src/data/input.txt",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
         )
@@ -182,9 +202,23 @@ class Trainer:
                 if step % self.estimate_loss_after == 0:
                     losses = self.estimate_loss()
 
+                # Log metrics to wandb
+                wandb.log(
+                    {
+                        "epoch": epoch,
+                        "step": step,
+                        "train_loss": losses["train"],
+                        "val_loss": losses["val"],
+                        "learning_rate": lr,
+                        "tokens_per_second": tokens_per_second,
+                        "time_taken": end_time - start_time,
+                        "gradient_norm": norm,
+                    }
+                )
+
                 # Print comprehensive training statistics
                 print(
-                    f"Epoch {epoch} | Loss: {losses['train']} | Val Loss: {losses['val']} | "
+                    f"Epoch {epoch} | Step {step} | Loss: {losses['train']} | Val Loss: {losses['val']} | "
                     f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
                     f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
                 )
@@ -192,21 +226,26 @@ class Trainer:
         # Save trained model parameters to disk
         torch.save(trainer.model.state_dict(), "gpt2_trained_model.pth")
 
+        # Finish wandb run
+        wandb.finish()
+
 
 if __name__ == "__main__":
     # Create trainer instance and start training
     trainer = Trainer()
+    # add breakpoint for code here
+    # import code;
     trainer.train()
 
-    # Load the trained model and generate sample text
-    trainer.model.load_state_dict(torch.load("gpt2_trained_model.pth"))
-    trainer.model.to(device)
+    # # Load the trained model and generate sample text
+    # trainer.model.load_state_dict(torch.load("gpt2_trained_model.pth"))
+    # trainer.model.to(device)
 
-    # Generate sample text using the trained model
-    generate(
-        num_sequences=3,  # Generate 3 different sequences
-        max_length=30,  # Maximum length of each sequence
-        model=trainer.model,
-        context="Hello, I'm a language model,",  # Starting prompt
-        device=device,
-    )
+    # # Generate sample text using the trained model
+    # generate(
+    #     num_sequences=3,  # Generate 3 different sequences
+    #     max_length=30,  # Maximum length of each sequence
+    #     model=trainer.model,
+    #     context="Hello, I'm a language model,",  # Starting prompt
+    #     device=device,
+    # )
