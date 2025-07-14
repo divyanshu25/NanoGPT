@@ -16,11 +16,11 @@ class GPTConfig:
     the architecture and training setup of the GPT model.
     """
 
-    block_size: int = 512  # Maximum sequence length (context window)
+    block_size: int = 1024  # Maximum sequence length (context window)
     vocab_size: int = 50257  # Size of the vocabulary (number of unique tokens)
-    n_layer: int = 2  # Number of transformer blocks in the model
-    n_head: int = 2  # Number of attention heads per transformer block
-    n_embed: int = 128  # Embedding dimension (hidden size)
+    n_layer: int = 12  # Number of transformer blocks in the model
+    n_head: int = 12  # Number of attention heads per transformer block
+    n_embed: int = 768  # Embedding dimension (hidden size)
     batch_size: int = 4  # Training batch size
 
 
