@@ -49,14 +49,14 @@ class Trainer:
 
         # Initialize data loader with training data
         self.dataloader = DataLoader(
-            data_file="/Users/divgoyal/workspace/NanoGPT/src/data/input.txt",
+            data_file=f"{parent_dir}/src/data/input.txt",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
         )
 
         # Eval dataloader
         self.eval_dataloader = DataLoader(
-            data_file="/Users/divgoyal/workspace/NanoGPT/src/data/input.txt",
+            data_file=f"{parent_dir}/src/data/input.txt",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
         )
@@ -170,7 +170,7 @@ class Trainer:
         # Main training loop over epochs
         for epoch in range(self.num_epochs):
             # Process all batches in the current epoch
-            for step in range(self.dataloader.total_batches):
+            for step in range(self.dataloader.total_train_batches):
                 start_time = time.time()  # Track step timing
 
                 # Get training batch and move to device
