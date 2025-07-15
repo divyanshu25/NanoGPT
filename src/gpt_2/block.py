@@ -1,3 +1,11 @@
+# Add gpt_2 to python path
+import sys
+import os
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
 import torch
 import torch.nn as nn
 from gpt_2.mlp import MLP
