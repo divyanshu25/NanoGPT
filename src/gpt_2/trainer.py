@@ -181,7 +181,8 @@ class Trainer:
                 self.optimzer.zero_grad()
 
                 # Forward pass: compute predictions and loss
-                logits, loss = self.model(x, y)
+                with torch.autocast(device_type=device, dtype=torch.bfloat16):
+                    logits, loss = self.model(x, y)
 
                 # Backward pass: compute gradients
                 loss.backward()
