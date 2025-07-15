@@ -49,7 +49,14 @@ class Trainer:
 
         # Initialize data loader with training data
         self.dataloader = DataLoader(
-            data_file="/home/azureuser/cloudfiles/code/Users/divgoyal/NanoGPT/src/data/input.txt",
+            data_file="/Users/divgoyal/workspace/NanoGPT/src/data/input.txt",
+            batch_size=self.config.batch_size,
+            block_size=self.config.block_size,
+        )
+
+        # Eval dataloader
+        self.eval_dataloader = DataLoader(
+            data_file="/Users/divgoyal/workspace/NanoGPT/src/data/input.txt",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
         )
@@ -99,7 +106,7 @@ class Trainer:
             dict: Contains 'train' and 'val' average losses
         """
         out = {}
-        self.model.eval()  # Set model to evaluation mode (disables dropout, etc.)
+        # self.model.eval()  # Set model to evaluation mode (disables dropout, etc.)
 
         # Evaluate on both train and validation splits
         for split in ["train", "val"]:
@@ -107,7 +114,7 @@ class Trainer:
 
             # Calculate loss over multiple samples for stable estimate
             for k in range(self.num_eval_samples):
-                X, Y = self.dataloader.get_batch(split)
+                X, Y = self.eval_dataloader.get_batch(split)
                 X = X.to(device)
                 Y = Y.to(device)
 
@@ -210,7 +217,9 @@ class Trainer:
 
                 # Periodically estimate loss on train/val sets for monitoring
                 if step % self.estimate_loss_after == 0:
+                    self.model.eval()
                     losses = self.estimate_loss()
+                    self.model.train()
 
                 # Log metrics to wandb
                 wandb.log(
