@@ -49,14 +49,14 @@ class Trainer:
 
         # Initialize data loader with training data
         self.dataloader = DataLoader(
-            data_file=f"{parent_dir}/src/data/input.txt",
+            data_file=f"{parent_dir}/data/input.txt",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
         )
 
         # Eval dataloader
         self.eval_dataloader = DataLoader(
-            data_file=f"{parent_dir}/src/data/input.txt",
+            data_file=f"{parent_dir}/data/input.txt",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
         )
