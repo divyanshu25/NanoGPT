@@ -65,6 +65,16 @@ class Trainer:
         self.num_epochs = 1  # Number of complete passes through the dataset
         self.num_eval_samples = 100  # Number of samples to use for loss estimation
         self.estimate_loss_after = 1  # Estimate loss every N steps
+        self.total_batch_size = self.config.total_batch_size
+        self.grad_accumulation_steps = self.total_batch_size // self.config.batch_size
+        assert (
+            self.total_batch_size % (self.config.batch_size * self.config.block_size)
+            == 0
+        ), "Total batch size must be divisible by batch size and block size"
+
+        # Print total batch size and grad accumulation steps
+        print(f"Total batch size: {self.total_batch_size}")
+        print(f"Grad accumulation steps: {self.grad_accumulation_steps}")
 
         # Learning rate scheduling parameters
         self.max_learning_rate = 6e-4  # Peak learning rate
@@ -172,20 +182,21 @@ class Trainer:
             # Process all batches in the current epoch
             for step in range(self.max_steps):
                 start_time = time.time()  # Track step timing
-
-                # Get training batch and move to device
-                x, y = self.dataloader.get_batch()
-                x, y = x.to(device), y.to(device)
-
-                # Reset gradients from previous step
                 self.optimzer.zero_grad()
+                for micro_step in range(self.grad_accumulation_steps):
+                    # Get training batch and move to device
+                    x, y = self.dataloader.get_batch()
+                    x, y = x.to(device), y.to(device)
 
-                # Forward pass: compute predictions and loss
-                with torch.autocast(device_type=device, dtype=torch.bfloat16):
-                    logits, loss = self.model(x, y)
+                    # Forward pass: compute predictions and loss
+                    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+                        logits, loss = self.model(x, y)
 
-                # Backward pass: compute gradients
-                loss.backward()
+                    # normalize loss for gradient accumulation
+                    loss = loss / self.grad_accumulation_steps
+
+                    # Backward pass: compute gradients
+                    loss.backward()
 
                 # Gradient clipping to prevent exploding gradients
                 # This stabilizes training by limiting gradient magnitude
@@ -197,9 +208,6 @@ class Trainer:
                 lr = self.get_lr(step)
                 for param_group in self.optimzer.param_groups:
                     param_group["lr"] = lr
-
-                # Optional: Print gradient norm and learning rate for debugging
-                # print(f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}")
 
                 # Apply gradients to update model parameters
                 self.optimzer.step()
@@ -213,6 +221,7 @@ class Trainer:
                 tokens_per_second = (
                     self.dataloader.batch_size
                     * self.dataloader.block_size
+                    * self.grad_accumulation_steps
                     / (end_time - start_time)
                 )
 

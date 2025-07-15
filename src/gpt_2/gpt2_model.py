@@ -31,6 +31,7 @@ class GPTConfig:
     n_head: int = 12  # Number of attention heads per transformer block
     n_embed: int = 768  # Embedding dimension (hidden size)
     batch_size: int = 4  # Training batch size
+    total_batch_size: int = 524288  # 2^19
 
 
 class GPT(nn.Module):
