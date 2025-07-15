@@ -45,7 +45,7 @@ class Trainer:
 
         # Optional: Compile model for faster training (commented out to avoid warnings)
         # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
-        # self.model = torch.compile(self.model, mode="reduce-overhead")
+        self.model = torch.compile(self.model)
 
         # Initialize data loader with training data
         self.dataloader = DataLoader(
@@ -66,7 +66,9 @@ class Trainer:
         self.num_eval_samples = 100  # Number of samples to use for loss estimation
         self.estimate_loss_after = 1  # Estimate loss every N steps
         self.total_batch_size = self.config.total_batch_size
-        self.grad_accumulation_steps = self.total_batch_size // self.config.batch_size
+        self.grad_accumulation_steps = self.total_batch_size // (
+            self.config.batch_size * self.config.block_size
+        )
         assert (
             self.total_batch_size % (self.config.batch_size * self.config.block_size)
             == 0
@@ -231,26 +233,26 @@ class Trainer:
                     losses = self.estimate_loss()
                     self.model.train()
 
-                # Log metrics to wandb
-                wandb.log(
-                    {
-                        "epoch": epoch,
-                        "step": step,
-                        "train_loss": losses["train"],
-                        "val_loss": losses["val"],
-                        "learning_rate": lr,
-                        "tokens_per_second": tokens_per_second,
-                        "time_taken": end_time - start_time,
-                        "gradient_norm": norm,
-                    }
-                )
+                    # Log metrics to wandb
+                    wandb.log(
+                        {
+                            "epoch": epoch,
+                            "step": step,
+                            "train_loss": losses["train"],
+                            "val_loss": losses["val"],
+                            "learning_rate": lr,
+                            "tokens_per_second": tokens_per_second,
+                            "time_taken": end_time - start_time,
+                            "gradient_norm": norm,
+                        }
+                    )
 
-                # Print comprehensive training statistics
-                print(
-                    f"Epoch {epoch} | Step {step} | Loss: {losses['train']} | Val Loss: {losses['val']} | "
-                    f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
-                    f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
-                )
+                    # Print comprehensive training statistics
+                    print(
+                        f"Epoch {epoch} | Step {step} | Loss: {losses['train']} | Val Loss: {losses['val']} | "
+                        f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
+                        f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
+                    )
 
         # Save trained model parameters to disk
         torch.save(trainer.model.state_dict(), "gpt2_trained_model.pth")
