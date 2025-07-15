@@ -355,11 +355,12 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     # Create and initialize the model
-    model = GPT(GPTConfig())
+
+    model = GPT.from_pretrained("gpt2")
+    print("Model loaded")
     model.eval()  # Set to evaluation mode (disables dropout, etc.)
     model.to(device)
 
-    # Generate sample text
     context = "Hello, I'm a language model,"
     generate(
         num_sequences=3,  # Generate 3 different sequences

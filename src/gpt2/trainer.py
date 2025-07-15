@@ -29,21 +29,6 @@ class Trainer:
     def __init__(self):
         """Initialize trainer with model configuration, data loading, and training parameters."""
         # Initialize wandb for experiment tracking
-        wandb.init(
-            project="nano-gpt2",
-            config={
-                "model_type": "GPT-2",
-                "batch_size": 32,
-                "block_size": 256,
-                "max_learning_rate": 6e-4,
-                "min_learning_rate": 6e-5,
-                "warmup_steps": 10,
-                "max_steps": 100,
-                "num_epochs": 1,
-                "weight_decay": 0.10,
-                "gradient_clip_norm": 1.0,
-            },
-        )
 
         # Initialize GPT model with default configuration
         self.config = GPTConfig()
@@ -77,6 +62,23 @@ class Trainer:
         # Initialize optimizer with AdamW and weight decay for regularization
         self.optimzer = self.model.configure_optimizers(
             learning_rate=self.max_learning_rate, weight_decay=0.10, device=device
+        )
+
+        # Initialize wandb for experiment tracking
+        wandb.init(
+            project="nano-gpt2",
+            config={
+                "model_type": "GPT-2",
+                "batch_size": self.config.batch_size,
+                "block_size": self.config.block_size,
+                "max_learning_rate": self.max_learning_rate,
+                "min_learning_rate": self.min_learning_rate,
+                "warmup_steps": self.warmup_steps,
+                "max_steps": self.max_steps,
+                "num_epochs": self.num_epochs,
+                "weight_decay": 0.10,
+                "gradient_clip_norm": 1.0,
+            },
         )
 
     ## Define function to estimate loss ##
