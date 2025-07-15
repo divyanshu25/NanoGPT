@@ -13,6 +13,7 @@ from torch.nn import functional as F
 from gpt_2.block import Block
 import tiktoken
 import inspect
+import time
 
 
 @dataclass
@@ -370,10 +371,13 @@ if __name__ == "__main__":
     model.to(device)
 
     context = "Hello, I'm a language model,"
+    start_time = time.time()
     generate(
         num_sequences=3,  # Generate 3 different sequences
-        max_length=30,  # Each sequence up to 30 tokens
+        max_length=50,  # Each sequence up to 30 tokens
         model=model,
         context=context,
         device=device,
     )
+    end_time = time.time()
+    print(f"Time taken: {end_time - start_time} seconds")
