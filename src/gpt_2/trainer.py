@@ -72,7 +72,7 @@ class Trainer:
             self.max_learning_rate * 0.1
         )  # Minimum learning rate (10% of max)
         self.warmup_steps = 10  # Steps to warm up from 0 to max learning rate
-        self.max_steps = 100  # Total training steps
+        self.max_steps = 50  # Total training steps
 
         # Initialize optimizer with AdamW and weight decay for regularization
         self.optimzer = self.model.configure_optimizers(
@@ -142,7 +142,7 @@ class Trainer:
         """
         if step < self.warmup_steps:
             # Linear warmup: gradually increase learning rate
-            lr = self.max_learning_rate * (step) / self.warmup_steps
+            lr = self.max_learning_rate * (step + 1) / self.warmup_steps
         elif step > self.max_steps:
             # After max steps, use minimum learning rate
             lr = self.min_learning_rate
@@ -170,7 +170,7 @@ class Trainer:
         # Main training loop over epochs
         for epoch in range(self.num_epochs):
             # Process all batches in the current epoch
-            for step in range(self.dataloader.total_train_batches):
+            for step in range(self.max_steps):
                 start_time = time.time()  # Track step timing
 
                 # Get training batch and move to device
