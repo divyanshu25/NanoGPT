@@ -15,8 +15,15 @@ class DataLoader:
         self.idx = 0
         self.current_index = 0
         self.total_batches = len(self.tokens) // (self.block_size)
-        print(f"Total tokens: {len(self.tokens)}")
-        print(f"Total batches: {self.total_batches} for 1 epoch")
+        self.total_train_batches = len(self.train_data) // (self.block_size)
+        self.total_val_batches = len(self.val_data) // (self.block_size)
+
+        print(
+            f"Total tokens: {len(self.tokens)} , Total train tokens: {len(self.train_data)} , Total val tokens: {len(self.val_data)}"
+        )
+        print(
+            f"Total batches: {self.total_batches}, Total train batches: {self.total_train_batches}, Total val batches: {self.total_val_batches} for 1 epoch"
+        )
 
     def get_batch(self, split="train"):
         if split == "train":
