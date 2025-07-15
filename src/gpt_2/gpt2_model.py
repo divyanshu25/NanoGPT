@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from gpt2.block import Block
+from gpt_2.block import Block
 import tiktoken
 import inspect
 

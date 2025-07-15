@@ -1,8 +1,8 @@
 import torch
-from gpt2.gpt2_model import GPT, GPTConfig
-from gpt2.dataloader import DataLoader
+from gpt_2.gpt2_model import GPT, GPTConfig
+from gpt_2.dataloader import DataLoader
 import time
-from gpt2.gpt2_model import generate
+from gpt_2.gpt2_model import generate
 import math
 import wandb
 

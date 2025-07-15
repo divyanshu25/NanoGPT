@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from gpt2.mlp import MLP
-from gpt2.attention import CausalSelfAttention
+from gpt_2.mlp import MLP
+from gpt_2.attention import CausalSelfAttention
 
 
 class Block(nn.Module):
