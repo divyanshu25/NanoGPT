@@ -40,7 +40,6 @@ class Trainer:
         # Optional: Compile model for faster training (commented out to avoid warnings)
         # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
         self.model = torch.compile(self.model)
-        print(f"Model initialized on device: {self.device}")
         if self.ddp:
             self.model = torch.nn.parallel.DistributedDataParallel(
                 self.model, device_ids=[self.ddp_local_rank]
@@ -48,7 +47,7 @@ class Trainer:
         raw_model = self.model.module if self.ddp else self.model
         # print(f"Raw model initialized on device: {raw_model.device}")
 
-       
+        self.raw_model = self.model.module if self.ddp else self.model
 
         # Training hyperparameters
         self.num_epochs = 1  # Number of complete passes through the dataset
@@ -96,7 +95,7 @@ class Trainer:
         # )
 
         # Initialize optimizer with AdamW and weight decay for regularization
-        self.optimzer = raw_model.configure_optimizers(
+        self.optimzer = self.raw_model.configure_optimizers(
             learning_rate=self.max_learning_rate, weight_decay=0.10, device=self.device
         )
 
@@ -242,7 +241,7 @@ class Trainer:
                 tokens_per_second = (
                     self.dataloader.batch_size
                     * self.dataloader.block_size
-                    * self.grad_accumulation_steps 
+                    * self.grad_accumulation_steps
                     * self.ddp_world_size
                     / (end_time - start_time)
                 )
