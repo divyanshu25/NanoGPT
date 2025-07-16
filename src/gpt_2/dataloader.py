@@ -3,7 +3,15 @@ import tiktoken
 
 
 class DataLoader:
-    def __init__(self, data_file, batch_size, block_size):
+    def __init__(
+        self,
+        data_file,
+        batch_size,
+        block_size,
+        ddp_world_size,
+        ddp_rank,
+        ddp_local_rank,
+    ):
         self.data = open(data_file, "r", encoding="utf-8").read()
         self.enc = tiktoken.get_encoding("gpt2")
         self.tokens = self.enc.encode(self.data)
@@ -17,6 +25,9 @@ class DataLoader:
         self.total_batches = len(self.tokens) // (self.block_size)
         self.total_train_batches = len(self.train_data) // (self.block_size)
         self.total_val_batches = len(self.val_data) // (self.block_size)
+        self.ddp_world_size = ddp_world_size
+        self.ddp_rank = ddp_rank
+        self.ddp_local_rank = ddp_local_rank
 
         print(
             f"Total tokens: {len(self.tokens)} , Total train tokens: {len(self.train_data)} , Total val tokens: {len(self.val_data)}"

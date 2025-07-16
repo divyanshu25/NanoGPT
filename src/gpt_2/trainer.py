@@ -14,19 +14,6 @@ from gpt_2.gpt2_model import generate
 import math
 import wandb
 
-## Initialize variables ##
-
-# Device selection: prioritize CUDA (NVIDIA GPUs), then MPS (Apple Silicon), fallback to CPU
-device = "cpu"
-if torch.cuda.is_available():
-    device = "cuda"
-elif torch.backends.mps.is_available():
-    device = "mps"
-else:
-    device = "cpu"
-
-print(f"Using device: {device}")
-
 
 class Trainer:
     """
@@ -34,9 +21,16 @@ class Trainer:
     Implements modern training techniques like learning rate scheduling and gradient clipping.
     """
 
-    def __init__(self):
+    def __init__(
+        self, ddp_rank, ddp_local_rank, ddp_world_size, master_process, device
+    ):
         """Initialize trainer with model configuration, data loading, and training parameters."""
-        # Initialize wandb for experiment tracking
+        # Initialize ddp variables
+        self.ddp_rank = ddp_rank
+        self.ddp_local_rank = ddp_local_rank
+        self.ddp_world_size = ddp_world_size
+        self.device = device
+        self.master_process = master_process
 
         # Initialize GPT model with default configuration
         self.config = GPTConfig()
@@ -47,36 +41,24 @@ class Trainer:
         # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
         self.model = torch.compile(self.model)
 
-        # Initialize data loader with training data
-        self.dataloader = DataLoader(
-            data_file=f"{parent_dir}/data/input.txt",
-            batch_size=self.config.batch_size,
-            block_size=self.config.block_size,
-        )
-
-        # Eval dataloader
-        self.eval_dataloader = DataLoader(
-            data_file=f"{parent_dir}/data/input.txt",
-            batch_size=self.config.batch_size,
-            block_size=self.config.block_size,
-        )
-
         # Training hyperparameters
         self.num_epochs = 1  # Number of complete passes through the dataset
         self.num_eval_samples = 100  # Number of samples to use for loss estimation
         self.estimate_loss_after = 1  # Estimate loss every N steps
         self.total_batch_size = self.config.total_batch_size
         self.grad_accumulation_steps = self.total_batch_size // (
-            self.config.batch_size * self.config.block_size
-        )
+            self.config.batch_size * self.config.block_size * self.ddp_world_size
+        )  # grad accumulation steps is the total batch size divided by the batch size and block size and ddp world size
         assert (
-            self.total_batch_size % (self.config.batch_size * self.config.block_size)
+            self.total_batch_size
+            % (self.config.batch_size * self.config.block_size * self.ddp_world_size)
             == 0
-        ), "Total batch size must be divisible by batch size and block size"
+        ), "Total batch size must be divisible by batch size and block size and ddp world size"
 
         # Print total batch size and grad accumulation steps
-        print(f"Total batch size: {self.total_batch_size}")
-        print(f"Grad accumulation steps: {self.grad_accumulation_steps}")
+        if self.master_process:
+            print(f"Total batch size: {self.total_batch_size}")
+            print(f"Grad accumulation steps: {self.grad_accumulation_steps}")
 
         # Learning rate scheduling parameters
         self.max_learning_rate = 6e-4  # Peak learning rate
@@ -85,6 +67,26 @@ class Trainer:
         )  # Minimum learning rate (10% of max)
         self.warmup_steps = 10  # Steps to warm up from 0 to max learning rate
         self.max_steps = 50  # Total training steps
+
+        # Initialize data loader with training data
+        self.dataloader = DataLoader(
+            data_file=f"{parent_dir}/data/input.txt",
+            batch_size=self.config.batch_size,
+            block_size=self.config.block_size,
+            ddp_world_size=self.ddp_world_size,
+            ddp_rank=self.ddp_rank,
+            ddp_local_rank=self.ddp_local_rank,
+        )
+
+        # Eval dataloader
+        self.eval_dataloader = DataLoader(
+            data_file=f"{parent_dir}/data/input.txt",
+            batch_size=self.config.batch_size,
+            block_size=self.config.block_size,
+            ddp_world_size=self.ddp_world_size,
+            ddp_rank=self.ddp_rank,
+            ddp_local_rank=self.ddp_local_rank,
+        )
 
         # Initialize optimizer with AdamW and weight decay for regularization
         self.optimzer = self.model.configure_optimizers(
@@ -127,8 +129,8 @@ class Trainer:
             # Calculate loss over multiple samples for stable estimate
             for k in range(self.num_eval_samples):
                 X, Y = self.eval_dataloader.get_batch(split)
-                X = X.to(device)
-                Y = Y.to(device)
+                X = X.to(self.device)
+                Y = Y.to(self.device)
 
                 # Forward pass without gradient computation (eval mode)
                 _, loss = self.model(X, Y)
@@ -188,10 +190,10 @@ class Trainer:
                 for micro_step in range(self.grad_accumulation_steps):
                     # Get training batch and move to device
                     x, y = self.dataloader.get_batch()
-                    x, y = x.to(device), y.to(device)
+                    x, y = x.to(self.device), y.to(self.device)
 
                     # Forward pass: compute predictions and loss
-                    with torch.autocast(device_type=device, dtype=torch.bfloat16):
+                    with torch.autocast(device_type=self.device, dtype=torch.bfloat16):
                         logits, loss = self.model(x, y)
 
                     # normalize loss for gradient accumulation
@@ -215,7 +217,7 @@ class Trainer:
                 self.optimzer.step()
 
                 # Synchronize CUDA operations for accurate timing
-                if device == "cuda":
+                if self.device == "cuda":
                     torch.cuda.synchronize()
                 end_time = time.time()
 
@@ -255,28 +257,7 @@ class Trainer:
                     )
 
         # Save trained model parameters to disk
-        torch.save(trainer.model.state_dict(), "gpt2_trained_model.pth")
+        torch.save(self.model.state_dict(), "gpt2_trained_model.pth")
 
         # Finish wandb run
         wandb.finish()
-
-
-if __name__ == "__main__":
-    # Create trainer instance and start training
-    trainer = Trainer()
-    # add breakpoint for code here
-    # import code;
-    trainer.train()
-
-    # # Load the trained model and generate sample text
-    # trainer.model.load_state_dict(torch.load("gpt2_trained_model.pth"))
-    # trainer.model.to(device)
-
-    # # Generate sample text using the trained model
-    # generate(
-    #     num_sequences=3,  # Generate 3 different sequences
-    #     max_length=30,  # Maximum length of each sequence
-    #     model=trainer.model,
-    #     context="Hello, I'm a language model,",  # Starting prompt
-    #     device=device,
-    # )
