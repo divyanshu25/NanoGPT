@@ -97,21 +97,22 @@ class Trainer:
         )
 
         # Initialize wandb for experiment tracking
-        wandb.init(
-            project="nano-gpt2",
-            config={
-                "model_type": "GPT-2",
-                "batch_size": self.config.batch_size,
-                "block_size": self.config.block_size,
-                "max_learning_rate": self.max_learning_rate,
-                "min_learning_rate": self.min_learning_rate,
-                "warmup_steps": self.warmup_steps,
-                "max_steps": self.max_steps,
-                "num_epochs": self.num_epochs,
-                "weight_decay": 0.10,
-                "gradient_clip_norm": 1.0,
-            },
-        )
+        if self.master_process:
+            wandb.init(
+                project="nano-gpt2",
+                config={
+                    "model_type": "GPT-2",
+                    "batch_size": self.config.batch_size,
+                    "block_size": self.config.block_size,
+                    "max_learning_rate": self.max_learning_rate,
+                    "min_learning_rate": self.min_learning_rate,
+                    "warmup_steps": self.warmup_steps,
+                    "max_steps": self.max_steps,
+                    "num_epochs": self.num_epochs,
+                    "weight_decay": 0.10,
+                    "gradient_clip_norm": 1.0,
+                },
+            )
 
     ## Define function to estimate loss ##
     def estimate_loss(self):
@@ -248,25 +249,26 @@ class Trainer:
                     # self.model.train()
 
                     # Log metrics to wandb
-                    wandb.log(
-                        {
-                            "epoch": epoch,
-                            "step": step,
-                            "train_loss": loss_accumulator,
-                            # "val_loss": losses["val"],
-                            "learning_rate": lr,
-                            "tokens_per_second": tokens_per_second,
-                            "time_taken": end_time - start_time,
-                            "gradient_norm": norm,
-                        }
-                    )
+                    if self.master_process:
+                        wandb.log(
+                            {
+                                "epoch": epoch,
+                                "step": step,
+                                "train_loss": loss_accumulator,
+                                # "val_loss": losses["val"],
+                                "learning_rate": lr,
+                                "tokens_per_second": tokens_per_second,
+                                "time_taken": end_time - start_time,
+                                "gradient_norm": norm,
+                            }
+                        )
 
-                    # Print comprehensive training statistics
-                    print(
-                        f"Epoch {epoch} | Step {step} | Loss: {loss_accumulator} | "
-                        f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
-                        f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
-                    )
+                        # Print comprehensive training statistics
+                        print(
+                            f"Epoch {epoch} | Step {step} | Loss: {loss_accumulator} | "
+                            f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
+                            f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
+                        )
 
         # Save trained model parameters to disk
         torch.save(self.model.state_dict(), "gpt2_trained_model.pth")
