@@ -17,6 +17,7 @@ import torch
 def run_trainer():
     ddp = int(os.environ.get("RANK", -1)) != -1
     if ddp:
+        print(f"Initializing DDP at rank: {os.environ['RANK']}")
         assert (
             torch.cuda.is_available()
         ), "CUDA is not available"  # check if cuda is available
