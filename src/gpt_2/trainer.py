@@ -36,7 +36,7 @@ class Trainer:
         # Initialize GPT model with default configuration
         self.config = GPTConfig()
         self.model = GPT(self.config)
-        self.model.to(device)
+        self.model.to(self.device)
         # Optional: Compile model for faster training (commented out to avoid warnings)
         # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
         self.model = torch.compile(self.model)
@@ -94,7 +94,7 @@ class Trainer:
 
         # Initialize optimizer with AdamW and weight decay for regularization
         self.optimzer = self.raw_model.configure_optimizers(
-            learning_rate=self.max_learning_rate, weight_decay=0.10, device=device
+            learning_rate=self.max_learning_rate, weight_decay=0.10, device=self.device
         )
 
         # Initialize wandb for experiment tracking
