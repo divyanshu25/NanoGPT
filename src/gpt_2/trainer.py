@@ -36,15 +36,19 @@ class Trainer:
         # Initialize GPT model with default configuration
         self.config = GPTConfig()
         self.model = GPT(self.config)
-        self.model.to(device)
+        self.model.to(self.device)
+        # Optional: Compile model for faster training (commented out to avoid warnings)
+        # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
+        self.model = torch.compile(self.model)
+        print(f"Model initialized on device: {self.device}")
         if self.ddp:
             self.model = torch.nn.parallel.DistributedDataParallel(
                 self.model, device_ids=[self.ddp_local_rank]
             )
+        raw_model = self.model.module if self.ddp else self.model
+        # print(f"Raw model initialized on device: {raw_model.device}")
 
-        # Optional: Compile model for faster training (commented out to avoid warnings)
-        # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
-        self.model = torch.compile(self.model)
+       
 
         # Training hyperparameters
         self.num_epochs = 1  # Number of complete passes through the dataset
@@ -83,17 +87,17 @@ class Trainer:
         )
 
         # Eval dataloader
-        self.eval_dataloader = DataLoader(
-            data_file=f"{parent_dir}/data/input.txt",
-            batch_size=self.config.batch_size,
-            block_size=self.config.block_size,
-            ddp_world_size=self.ddp_world_size,
-            ddp_rank=self.ddp_rank,
-        )
+        # self.eval_dataloader = DataLoader(
+        #     data_file=f"{parent_dir}/data/input.txt",
+        #     batch_size=self.config.batch_size,
+        #     block_size=self.config.block_size,
+        #     ddp_world_size=self.ddp_world_size,
+        #     ddp_rank=self.ddp_rank,
+        # )
 
         # Initialize optimizer with AdamW and weight decay for regularization
-        self.optimzer = self.model.configure_optimizers(
-            learning_rate=self.max_learning_rate, weight_decay=0.10, device=device
+        self.optimzer = raw_model.configure_optimizers(
+            learning_rate=self.max_learning_rate, weight_decay=0.10, device=self.device
         )
 
         # Initialize wandb for experiment tracking
@@ -191,7 +195,7 @@ class Trainer:
             for step in range(self.max_steps):
                 start_time = time.time()  # Track step timing
                 self.optimzer.zero_grad()
-                loss_accumulator = 0
+                loss_accumulator = torch.tensor(0.0, device=self.device)
                 for micro_step in range(self.grad_accumulation_steps):
                     # Get training batch and move to device
                     x, y = self.dataloader.get_batch()
@@ -203,7 +207,7 @@ class Trainer:
 
                     # normalize loss for gradient accumulation
                     loss = loss / self.grad_accumulation_steps
-                    loss_accumulator += loss.item()
+                    loss_accumulator += loss
                     if self.ddp:
                         self.model.require_backward_grad_sync = (
                             micro_step == self.grad_accumulation_steps - 1
@@ -255,7 +259,7 @@ class Trainer:
                             {
                                 "epoch": epoch,
                                 "step": step,
-                                "train_loss": loss_accumulator,
+                                "train_loss": loss_accumulator.item(),
                                 # "val_loss": losses["val"],
                                 "learning_rate": lr,
                                 "tokens_per_second": tokens_per_second,
@@ -266,7 +270,7 @@ class Trainer:
 
                         # Print comprehensive training statistics
                         print(
-                            f"Epoch {epoch} | Step {step} | Loss: {loss_accumulator} | "
+                            f"Epoch {epoch} | Step {step} | Loss: {loss_accumulator.item():.4f} | "
                             f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
                             f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
                         )

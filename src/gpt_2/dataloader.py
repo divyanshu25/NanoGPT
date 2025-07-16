@@ -66,10 +66,11 @@ class DataLoader:
                     // (self.batch_size * self.block_size * self.ddp_world_size)
                 )
                 - 1,
+                size=(1,),
             )
             self.current_index = (
                 self.ddp_rank * self.batch_size * self.block_size
-                + rand_chunk_number
+                + rand_chunk_number.item()
                 * self.batch_size
                 * self.block_size
                 * self.ddp_world_size

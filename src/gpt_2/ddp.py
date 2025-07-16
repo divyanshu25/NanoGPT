@@ -17,6 +17,7 @@ import torch
 def run_trainer():
     ddp = int(os.environ.get("RANK", -1)) != -1
     if ddp:
+        print("Initializing DDP")
         assert (
             torch.cuda.is_available()
         ), "CUDA is not available"  # check if cuda is available
@@ -49,3 +50,6 @@ def run_trainer():
     trainer.train()  # train
     if ddp:
         destroy_process_group()  # destroy process group
+
+if __name__ == "__main__":
+    run_trainer()
