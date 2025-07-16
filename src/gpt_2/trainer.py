@@ -238,7 +238,8 @@ class Trainer:
                 tokens_per_second = (
                     self.dataloader.batch_size
                     * self.dataloader.block_size
-                    * self.grad_accumulation_steps
+                    * self.grad_accumulation_steps 
+                    * self.ddp_world_size
                     / (end_time - start_time)
                 )
 
