@@ -44,7 +44,7 @@ def run_trainer():
         torch.cuda.manual_seed(42)
 
     trainer = Trainer(
-        ddp_rank, ddp_local_rank, ddp_world_size, master_process, device
+        ddp, ddp_rank, ddp_local_rank, ddp_world_size, master_process, device
     )  # create trainer
     trainer.train()  # train
     if ddp:

@@ -22,13 +22,14 @@ class Trainer:
     """
 
     def __init__(
-        self, ddp_rank, ddp_local_rank, ddp_world_size, master_process, device
+        self, ddp, ddp_rank, ddp_local_rank, ddp_world_size, master_process, device
     ):
         """Initialize trainer with model configuration, data loading, and training parameters."""
         # Initialize ddp variables
         self.ddp_rank = ddp_rank
         self.ddp_local_rank = ddp_local_rank
         self.ddp_world_size = ddp_world_size
+        self.ddp = ddp
         self.device = device
         self.master_process = master_process
 
@@ -36,6 +37,10 @@ class Trainer:
         self.config = GPTConfig()
         self.model = GPT(self.config)
         self.model.to(device)
+        if self.ddp:
+            self.model = torch.nn.parallel.DistributedDataParallel(
+                self.model, device_ids=[self.ddp_local_rank]
+            )
 
         # Optional: Compile model for faster training (commented out to avoid warnings)
         # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
@@ -75,7 +80,6 @@ class Trainer:
             block_size=self.config.block_size,
             ddp_world_size=self.ddp_world_size,
             ddp_rank=self.ddp_rank,
-            ddp_local_rank=self.ddp_local_rank,
         )
 
         # Eval dataloader
@@ -85,7 +89,6 @@ class Trainer:
             block_size=self.config.block_size,
             ddp_world_size=self.ddp_world_size,
             ddp_rank=self.ddp_rank,
-            ddp_local_rank=self.ddp_local_rank,
         )
 
         # Initialize optimizer with AdamW and weight decay for regularization
@@ -187,6 +190,7 @@ class Trainer:
             for step in range(self.max_steps):
                 start_time = time.time()  # Track step timing
                 self.optimzer.zero_grad()
+                loss_accumulator = 0
                 for micro_step in range(self.grad_accumulation_steps):
                     # Get training batch and move to device
                     x, y = self.dataloader.get_batch()
@@ -198,9 +202,17 @@ class Trainer:
 
                     # normalize loss for gradient accumulation
                     loss = loss / self.grad_accumulation_steps
-
+                    loss_accumulator += loss.item()
+                    if self.ddp:
+                        self.model.require_backward_grad_sync = (
+                            micro_step == self.grad_accumulation_steps - 1
+                        )
                     # Backward pass: compute gradients
                     loss.backward()
+                if self.ddp:
+                    torch.distributed.all_reduce(
+                        loss_accumulator, op=torch.distributed.ReduceOp.AVG
+                    )
 
                 # Gradient clipping to prevent exploding gradients
                 # This stabilizes training by limiting gradient magnitude
@@ -231,17 +243,17 @@ class Trainer:
 
                 # Periodically estimate loss on train/val sets for monitoring
                 if step % self.estimate_loss_after == 0:
-                    self.model.eval()
-                    losses = self.estimate_loss()
-                    self.model.train()
+                    # self.model.eval()
+                    # losses = self.estimate_loss()
+                    # self.model.train()
 
                     # Log metrics to wandb
                     wandb.log(
                         {
                             "epoch": epoch,
                             "step": step,
-                            "train_loss": losses["train"],
-                            "val_loss": losses["val"],
+                            "train_loss": loss_accumulator,
+                            # "val_loss": losses["val"],
                             "learning_rate": lr,
                             "tokens_per_second": tokens_per_second,
                             "time_taken": end_time - start_time,
@@ -251,7 +263,7 @@ class Trainer:
 
                     # Print comprehensive training statistics
                     print(
-                        f"Epoch {epoch} | Step {step} | Loss: {losses['train']} | Val Loss: {losses['val']} | "
+                        f"Epoch {epoch} | Step {step} | Loss: {loss_accumulator} | "
                         f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
                         f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
                     )
