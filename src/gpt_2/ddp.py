@@ -49,3 +49,7 @@ def run_trainer():
     trainer.train()  # train
     if ddp:
         destroy_process_group()  # destroy process group
+
+
+if __name__ == "__main__":
+    run_trainer()
