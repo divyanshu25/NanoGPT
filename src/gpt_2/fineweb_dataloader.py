@@ -53,13 +53,13 @@ class FinewebDataloader:
 
     def __init__(
         self,
-        data_dir="edu_fineweb10B",
-        batch_size=128,
-        block_size=1024,
-        ddp_world_size=1,
-        ddp_rank=0,
-        split="train",
-        master_process=True,
+        data_dir,
+        batch_size,
+        block_size,
+        ddp_world_size,
+        ddp_rank,
+        split,
+        master_process,
     ):
         """
         Initialize the FineWeb data loader.
@@ -84,9 +84,8 @@ class FinewebDataloader:
             AssertionError: If split is not 'train' or 'val', or if no shards
                 are found in the data directory.
         """
-        self.data_dir = os.path.join(os.path.dirname(__file__), data_dir)
-        print(f"Data directory: {self.data_dir}")
 
+        print(f"Data directory: {data_dir}")
         self.batch_size = batch_size
         self.block_size = block_size
         self.ddp_world_size = ddp_world_size

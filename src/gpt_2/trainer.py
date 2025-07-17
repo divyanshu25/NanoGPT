@@ -8,11 +8,12 @@ sys.path.append(parent_dir)
 
 import torch
 from gpt_2.gpt2_model import GPT, GPTConfig
-from gpt_2.dataloader import DataLoader
+from gpt_2.fineweb_dataloader import FinewebDataloader
 import time
 from gpt_2.gpt2_model import generate
 import math
 import wandb
+from gpt_2.evaluator import Evaluators
 
 
 class Trainer:
@@ -37,22 +38,24 @@ class Trainer:
         self.config = GPTConfig()
         self.model = GPT(self.config)
         self.model.to(self.device)
+
         # Optional: Compile model for faster training (commented out to avoid warnings)
         # Use "reduce-overhead" mode instead of "default" to avoid SM warnings on consumer hardware
-        self.model = torch.compile(self.model)
+        # self.model = torch.compile(self.model)
+
         if self.ddp:
             self.model = torch.nn.parallel.DistributedDataParallel(
                 self.model, device_ids=[self.ddp_local_rank]
             )
-        raw_model = self.model.module if self.ddp else self.model
-        # print(f"Raw model initialized on device: {raw_model.device}")
-
-        self.raw_model = self.model.module if self.ddp else self.model
+            self.raw_model = self.model.module if self.ddp else self.model
+        else:
+            self.raw_model = self.model
 
         # Training hyperparameters
         self.num_epochs = 1  # Number of complete passes through the dataset
-        self.num_eval_samples = 100  # Number of samples to use for loss estimation
-        self.estimate_loss_after = 1  # Estimate loss every N steps
+
+        self.rum_evals_after = 250  # Run evals every N steps
+
         self.total_batch_size = self.config.total_batch_size
         self.grad_accumulation_steps = self.total_batch_size // (
             self.config.batch_size * self.config.block_size * self.ddp_world_size
@@ -77,22 +80,33 @@ class Trainer:
         self.max_steps = 50  # Total training steps
 
         # Initialize data loader with training data
-        self.dataloader = DataLoader(
-            data_file=f"{parent_dir}/data/input.txt",
+        self.train_dataloader = FinewebDataloader(
+            data_dir=f"{parent_dir}/data/edu_fineweb10B",
             batch_size=self.config.batch_size,
             block_size=self.config.block_size,
             ddp_world_size=self.ddp_world_size,
             ddp_rank=self.ddp_rank,
+            split="train",
+            master_process=self.master_process,
         )
 
         # Eval dataloader
-        # self.eval_dataloader = DataLoader(
-        #     data_file=f"{parent_dir}/data/input.txt",
-        #     batch_size=self.config.batch_size,
-        #     block_size=self.config.block_size,
-        #     ddp_world_size=self.ddp_world_size,
-        #     ddp_rank=self.ddp_rank,
-        # )
+        self.eval_dataloader = FinewebDataloader(
+            data_dir=f"{parent_dir}/data/edu_fineweb10B",
+            batch_size=self.config.batch_size,
+            block_size=self.config.block_size,
+            ddp_world_size=self.ddp_world_size,
+            ddp_rank=self.ddp_rank,
+            split="val",
+            master_process=self.master_process,
+        )
+        self.evaluator = Evaluators(
+            model=self.model,
+            eval_dataloader=self.eval_dataloader,
+            device=self.device,
+            master_process=self.master_process,
+            ddp=self.ddp,
+        )
 
         # Initialize optimizer with AdamW and weight decay for regularization
         self.optimzer = self.raw_model.configure_optimizers(
@@ -102,7 +116,7 @@ class Trainer:
         # Initialize wandb for experiment tracking
         if self.master_process:
             wandb.init(
-                project="nano-gpt2",
+                project="gpt2-fineweb",
                 config={
                     "model_type": "GPT-2",
                     "batch_size": self.config.batch_size,
@@ -116,36 +130,6 @@ class Trainer:
                     "gradient_clip_norm": 1.0,
                 },
             )
-
-    ## Define function to estimate loss ##
-    def estimate_loss(self):
-        """
-        Estimate average loss on both training and validation sets.
-        This provides a more stable estimate than single-batch loss.
-
-        Returns:
-            dict: Contains 'train' and 'val' average losses
-        """
-        out = {}
-        # self.model.eval()  # Set model to evaluation mode (disables dropout, etc.)
-
-        # Evaluate on both train and validation splits
-        for split in ["train", "val"]:
-            losses = torch.zeros(self.num_eval_samples)
-
-            # Calculate loss over multiple samples for stable estimate
-            for k in range(self.num_eval_samples):
-                X, Y = self.eval_dataloader.get_batch(split)
-                X = X.to(self.device)
-                Y = Y.to(self.device)
-
-                # Forward pass without gradient computation (eval mode)
-                _, loss = self.model(X, Y)
-                losses[k] = loss.item()
-
-            # Store average loss for this split
-            out[split] = losses.mean()
-        return out
 
     def get_lr(self, step):
         """
@@ -247,35 +231,31 @@ class Trainer:
                 )
 
                 # Periodically estimate loss on train/val sets for monitoring
-                if step % self.estimate_loss_after == 0:
-                    # self.model.eval()
-                    # losses = self.estimate_loss()
-                    # self.model.train()
+                if step % self.rum_evals_after == 0:
+                    self.evaluator.estimate_validation_loss(
+                        step=step, checkpoint_model=True, max_steps=self.max_steps
+                    )
+                # Log metrics to wandb
+                if self.master_process:
+                    wandb.log(
+                        {
+                            "epoch": epoch,
+                            "step": step,
+                            "train_loss": loss_accumulator.item(),
+                            "val_loss": self.evaluator.val_loss,
+                            "learning_rate": lr,
+                            "tokens_per_second": tokens_per_second,
+                            "time_taken": end_time - start_time,
+                            "gradient_norm": norm,
+                        }
+                    )
 
-                    # Log metrics to wandb
-                    if self.master_process:
-                        wandb.log(
-                            {
-                                "epoch": epoch,
-                                "step": step,
-                                "train_loss": loss_accumulator.item(),
-                                # "val_loss": losses["val"],
-                                "learning_rate": lr,
-                                "tokens_per_second": tokens_per_second,
-                                "time_taken": end_time - start_time,
-                                "gradient_norm": norm,
-                            }
-                        )
-
-                        # Print comprehensive training statistics
-                        print(
-                            f"Epoch {epoch} | Step {step} | Loss: {loss_accumulator.item():.4f} | "
-                            f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
-                            f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
-                        )
-
-        # Save trained model parameters to disk
-        torch.save(self.model.state_dict(), "gpt2_trained_model.pth")
+                    # Print comprehensive training statistics
+                    print(
+                        f"Epoch {epoch} | Step {step} | Loss: {loss_accumulator.item():.4f} | "
+                        f"Tokens per second: {tokens_per_second} | Time taken: {end_time - start_time} seconds | "
+                        f"Gradient norm: {norm: .4e} | Learning rate: {lr: .4e}"
+                    )
 
         # Finish wandb run
         wandb.finish()
