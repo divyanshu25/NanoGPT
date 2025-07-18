@@ -289,7 +289,9 @@ class GPT(nn.Module):
         return model
 
 
-def generate(num_sequences, max_length, model, context, device):
+def generate(
+    num_sequences, max_length, model, context, device, random_number_generator
+):
     """
     Generate text sequences using the trained GPT model.
 
@@ -336,7 +338,9 @@ def generate(num_sequences, max_length, model, context, device):
             topk_probs, topk_indices = torch.topk(probs, 50, dim=-1)
 
             # Sample from the top-k distribution
-            ix = torch.multinomial(topk_probs, num_samples=1)  # Shape: (B, 1)
+            ix = torch.multinomial(
+                topk_probs, num_samples=1, generator=random_number_generator
+            )  # Shape: (B, 1)
 
             # Get the actual token indices from the top-k indices
             xcol = torch.gather(topk_indices, -1, ix)  # Shape: (B, 1)
@@ -345,10 +349,12 @@ def generate(num_sequences, max_length, model, context, device):
             x = torch.cat((x, xcol), dim=1)
 
     # Decode and print all generated sequences
+    all_decoded = []
     for i in range(num_sequences):
         tokens = x[i, :max_length].tolist()
         decoded = enc.decode(tokens)
-        print(">", decoded)
+        all_decoded.append(decoded)
+    return all_decoded
 
 
 # Test the model when script is run directly
@@ -373,12 +379,14 @@ if __name__ == "__main__":
 
     context = "Hello, I'm a language model,"
     start_time = time.time()
-    generate(
+    decoded = generate(
         num_sequences=3,  # Generate 3 different sequences
         max_length=50,  # Each sequence up to 30 tokens
         model=model,
         context=context,
         device=device,
     )
+    for decoded_seq in decoded:
+        print(">", decoded_seq)
     end_time = time.time()
     print(f"Time taken: {end_time - start_time} seconds")

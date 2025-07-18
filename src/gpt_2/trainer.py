@@ -54,7 +54,7 @@ class Trainer:
         # Training hyperparameters
         self.num_epochs = 1  # Number of complete passes through the dataset
 
-        self.rum_evals_after = 250  # Run evals every N steps
+        self.run_evals_after = 250  # Run evals every N steps
 
         self.total_batch_size = self.config.total_batch_size
         self.grad_accumulation_steps = self.total_batch_size // (
@@ -231,9 +231,14 @@ class Trainer:
                 )
 
                 # Periodically estimate loss on train/val sets for monitoring
-                if step % self.rum_evals_after == 0:
+                if step % self.run_evals_after == 0:
                     self.evaluator.estimate_validation_loss(
                         step=step, checkpoint_model=True, max_steps=self.max_steps
+                    )
+                    self.evaluator.sample_from_model(
+                        num_sequences=4,
+                        max_length=32,
+                        context="Hello, I'm a language model,",
                     )
                 # Log metrics to wandb
                 if self.master_process:
@@ -242,7 +247,6 @@ class Trainer:
                             "epoch": epoch,
                             "step": step,
                             "train_loss": loss_accumulator.item(),
-                            "val_loss": self.evaluator.val_loss,
                             "learning_rate": lr,
                             "tokens_per_second": tokens_per_second,
                             "time_taken": end_time - start_time,

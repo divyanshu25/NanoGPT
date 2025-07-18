@@ -1,6 +1,7 @@
 import torch
 import wandb
 import os
+from gpt_2.gpt2_model import generate
 
 
 class Evaluators:
@@ -43,9 +44,11 @@ class Evaluators:
 
         if self.master_process:
             print(f"Step {step} | Validation loss: {val_loss_accumulator.item():.4f}")
-            wandb.log({"val_loss": val_loss_accumulator.item()}, step=step)
+            wandb.log({"val_loss": val_loss_accumulator.item(), "step": step})
 
-        if checkpoint_model or step == max_steps - 1:
+        if (
+            checkpoint_model and step > 0 and step % 5000 == 0
+        ) or step == max_steps - 1:
             checkpoint = {
                 "model": self.model.state_dict(),
                 "config": self.model.config,
@@ -54,5 +57,22 @@ class Evaluators:
             }
             parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             torch.save(
-                checkpoint, f"{parent_dir}/checkpoints/gpt2_checkpoint_{step}.pt"
+                checkpoint, f"{parent_dir}/checkpoints/model_checkpoint_{step}.pt"
             )
+
+    def sample_from_model(
+        self, num_sequences=4, max_length=32, context="Hello, I'm a language model,"
+    ):
+        sample_rng = torch.Generator(device=self.device)
+        sample_rng.manual_seed(42 + self.ddp_rank)
+
+        decoded = generate(
+            num_sequences=num_sequences,  # Generate 3 different sequences
+            max_length=max_length,  # Each sequence up to 30 tokens
+            model=self.model,
+            context=context,
+            device=self.device,
+            random_number_generator=sample_rng,
+        )
+        for decoded_seq in decoded:
+            print(f"Decoded sequence from {self.ddp_rank}: > {decoded_seq}")
